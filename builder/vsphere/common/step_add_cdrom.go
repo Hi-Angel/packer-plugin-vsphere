@@ -63,7 +63,8 @@ func (s *StepAddCDRom) Run(_ context.Context, state multistep.StateBag) multiste
 	ui := state.Get("ui").(packersdk.Ui)
 	vm := state.Get("vm").(driver.VirtualMachine)
 
-	if s.Config.CdromType == "sata" {
+	// when ReuseVM is set we are not supposed to add new hw
+	if !s.ReuseVM && s.Config.CdromType == "sata" {
 		if _, err := vm.FindSATAController(); err == driver.ErrNoSataController {
 			ui.Say("Adding SATA controller...")
 			if err := vm.AddSATAController(); err != nil {
@@ -90,9 +91,9 @@ func (s *StepAddCDRom) Run(_ context.Context, state multistep.StateBag) multiste
 			state.Put("error", fmt.Errorf("invalid path: empty string"))
 			return multistep.ActionHalt
 		}
-		cdrom, err := vm.AddCdrom(s.Config.CdromType)
+		cdrom, err := GetOrMakeCdroms()
 		if err != nil {
-			state.Put("error", fmt.Errorf("errors creating a cdrom: %v", err))
+			state.Put("error", fmt.Errorf("errors creating or getting a cdrom: %v", err))
 			return multistep.ActionHalt
 		}
 		if err := vm.MountCdrom(path, cdrom); err != nil {

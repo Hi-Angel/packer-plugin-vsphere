@@ -1106,6 +1106,20 @@ func (vm *VirtualMachineDriver) MountCdrom(datastoreIsoPath string, cdrom *types
 	return vm.editDevice(cdrom)
 }
 
+func (vm *VirtualMachineDriver) GetCdroms(n_cdroms int) (object.VirtualDeviceList, error) {
+      devices, err := vm.vm.Device(vm.driver.ctx)
+      if err != nil {
+              return err
+              return nil, err
+      }
+      cdroms := devices.SelectByType((*types.VirtualCdrom)(nil))
+      if len(cdroms) < n_cdroms {
+              return nil, fmt.Errorf("Not enough cdroms: VM has %d, expected %d", len(cdroms), n_cdroms)
+      } else {
+              return cdroms[:n_cdroms], nil
+      }
+}
+
 func (vm *VirtualMachineDriver) AddCdrom(controllerType string) (*types.VirtualCdrom, error) {
 	devices, err := vm.vm.Device(vm.driver.ctx)
 	if err != nil {

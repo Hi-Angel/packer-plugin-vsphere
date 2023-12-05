@@ -5,6 +5,7 @@ package driver
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 
@@ -30,10 +31,13 @@ type VirtualMachineMock struct {
 	AddSATAControllerCalled bool
 	AddSATAControllerErr    error
 
-	AddCdromCalledTimes int
-	AddCdromErr         error
-	AddCdromTypes       []string
-	AddCdromPaths       []string
+	MakeCdromsCdromsPrexisted int
+	MakeCdromsCdromsTotal     int
+
+	MountCdromCalledTimes int
+	MountCdromErr         error
+	MountCdromTypes       []string
+	MountCdromPaths       []string
 
 	AddFlagCalled            bool
 	AddFlagCalledTimes       int
@@ -73,6 +77,10 @@ type VirtualMachineMock struct {
 	CloneCalled bool
 	CloneConfig *CloneConfig
 	CloneError  error
+}
+
+type VirtualDeviceMock struct {
+	devName string
 }
 
 func (vm *VirtualMachineMock) Info(params ...string) (*mo.VirtualMachine, error) {
@@ -269,7 +277,7 @@ func (vm *VirtualMachineMock) CreateCdrom(c *types.VirtualController) (*types.Vi
 	return nil, nil
 }
 
-func (vm *VirtualMachineMock) RemoveCdroms() error {
+func (vm *VirtualMachineMock) RemoveCdroms(n_cdroms int) error {
 	vm.RemoveCdromsCalled = true
 	return vm.RemoveCdromsErr
 }

@@ -93,13 +93,83 @@ func TestStepAddCDRom_Run(t *testing.T) {
 			vmMock:         new(driver.VirtualMachineMock),
 			expectedAction: multistep.ActionContinue,
 			expectedVmMock: &driver.VirtualMachineMock{
-				FindSATAControllerCalled: true,
-				AddCdromCalledTimes:      3,
-				AddCdromTypes:            []string{"sata", "sata", "sata"},
-				AddCdromPaths:            []string{"iso/path", "remote/path", "cd/path"},
+				MakeCdromsCdromsTotal: 3,
+				FindSATAControllerCalled:   true,
+				MountCdromCalledTimes:      3,
+				MountCdromTypes:            []string{"sata", "sata", "sata"},
+				MountCdromPaths:            []string{"iso/path", "remote/path", "cd/path"},
 			},
 			fail:       false,
 			errMessage: "",
+		},
+		{
+			name:  "3 mounts being added to a pre-existing VM with same CDroms amount",
+			state: cdAndIsoRemotePathStateBag(),
+			step: &StepAddCDRom{
+				Config: &CDRomConfig{
+					CdromType: "sata",
+					ISOPaths:  []string{"iso/path"},
+				},
+				ReuseVM: true,
+			},
+			vmMock: &driver.VirtualMachineMock{
+				MakeCdromsCdromsPrexisted: 3,
+			},
+			expectedAction: multistep.ActionContinue,
+			expectedVmMock: &driver.VirtualMachineMock{
+				MakeCdromsCdromsPrexisted: 3,
+				MakeCdromsCdromsTotal:     3,
+				MountCdromCalledTimes:          3,
+				MountCdromTypes:                []string{"sata", "sata", "sata"},
+				MountCdromPaths:                []string{"iso/path", "remote/path", "cd/path"},
+			},
+			fail:       false,
+			errMessage: "",
+		},
+		{
+			name:  "3 mounts being added to a pre-existing VM with larger CDroms amount",
+			state: cdAndIsoRemotePathStateBag(),
+			step: &StepAddCDRom{
+				Config: &CDRomConfig{
+					CdromType: "sata",
+					ISOPaths:  []string{"iso/path"},
+				},
+				ReuseVM: true,
+			},
+			vmMock: &driver.VirtualMachineMock{
+				MakeCdromsCdromsPrexisted: 5,
+			},
+			expectedAction: multistep.ActionContinue,
+			expectedVmMock: &driver.VirtualMachineMock{
+				MakeCdromsCdromsPrexisted: 5,
+				MakeCdromsCdromsTotal:     5,
+				MountCdromCalledTimes:          3,
+				MountCdromTypes:                []string{"sata", "sata", "sata"},
+				MountCdromPaths:                []string{"iso/path", "remote/path", "cd/path"},
+			},
+			fail:       false,
+			errMessage: "",
+		},
+		{
+			name:  "3 mounts being added to a pre-existing VM with lesser CDroms amount",
+			state: cdAndIsoRemotePathStateBag(),
+			step: &StepAddCDRom{
+				Config: &CDRomConfig{
+					CdromType: "sata",
+					ISOPaths:  []string{"iso/path"},
+				},
+				ReuseVM: true,
+			},
+			vmMock: &driver.VirtualMachineMock{
+				MakeCdromsCdromsPrexisted: 1,
+			},
+			expectedAction: multistep.ActionHalt,
+			expectedVmMock: &driver.VirtualMachineMock{
+				MakeCdromsCdromsPrexisted: 1,
+				MakeCdromsCdromsTotal:     1,
+			},
+			fail:       true,
+			errMessage: "Not enough cdroms: VM has 1, expected 3",
 		},
 		{
 			name:  "Add SATA Controller",
@@ -153,9 +223,10 @@ func TestStepAddCDRom_Run(t *testing.T) {
 			vmMock:         new(driver.VirtualMachineMock),
 			expectedAction: multistep.ActionContinue,
 			expectedVmMock: &driver.VirtualMachineMock{
-				AddCdromCalledTimes: 1,
-				AddCdromTypes:       []string{"ide"},
-				AddCdromPaths:       []string{"iso/path"},
+				MakeCdromsCdromsTotal: 1,
+				MountCdromCalledTimes:      1,
+				MountCdromTypes:            []string{"ide"},
+				MountCdromPaths:            []string{"iso/path"},
 			},
 			fail:       false,
 			errMessage: "",
@@ -169,16 +240,17 @@ func TestStepAddCDRom_Run(t *testing.T) {
 				},
 			},
 			vmMock: &driver.VirtualMachineMock{
-				AddCdromErr: fmt.Errorf("AddCdrom error"),
+				MountCdromErr: fmt.Errorf("MountCdrom error"),
 			},
 			expectedAction: multistep.ActionHalt,
 			expectedVmMock: &driver.VirtualMachineMock{
-				AddCdromCalledTimes: 1,
-				AddCdromTypes:       []string{""},
-				AddCdromPaths:       []string{"iso/path"},
+				MakeCdromsCdromsTotal: 1,
+				MountCdromCalledTimes:      1,
+				MountCdromTypes:            []string{""},
+				MountCdromPaths:            []string{"iso/path"},
 			},
 			fail:       true,
-			errMessage: fmt.Sprintf("error mounting an image 'iso/path': %v", fmt.Errorf("AddCdrom error")),
+			errMessage: fmt.Sprintf("error mounting an image 'iso/path': %v", fmt.Errorf("MountCdrom error")),
 		},
 		{
 			name:  "Fail to add cdrom from state iso_remote_path",
@@ -187,16 +259,17 @@ func TestStepAddCDRom_Run(t *testing.T) {
 				Config: new(CDRomConfig),
 			},
 			vmMock: &driver.VirtualMachineMock{
-				AddCdromErr: fmt.Errorf("AddCdrom error"),
+				MountCdromErr: fmt.Errorf("MountCdrom error"),
 			},
 			expectedAction: multistep.ActionHalt,
 			expectedVmMock: &driver.VirtualMachineMock{
-				AddCdromCalledTimes: 1,
-				AddCdromTypes:       []string{""},
-				AddCdromPaths:       []string{"remote/path"},
+				MakeCdromsCdromsTotal: 1,
+				MountCdromCalledTimes:      1,
+				MountCdromTypes:            []string{""},
+				MountCdromPaths:            []string{"remote/path"},
 			},
 			fail:       true,
-			errMessage: fmt.Sprintf("error mounting an image 'remote/path': %v", fmt.Errorf("AddCdrom error")),
+			errMessage: fmt.Sprintf("error mounting an image 'remote/path': %v", fmt.Errorf("MountCdrom error")),
 		},
 	}
 
