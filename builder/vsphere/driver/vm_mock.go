@@ -5,6 +5,7 @@ package driver
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 
@@ -30,10 +31,13 @@ type VirtualMachineMock struct {
 	AddSATAControllerCalled bool
 	AddSATAControllerErr    error
 
-	AddCdromCalledTimes int
-	AddCdromErr         error
-	AddCdromTypes       []string
-	AddCdromPaths       []string
+	MakeCdromsCdromsPrexisted int
+	MakeCdromsCdromsTotal     int
+
+	MountCdromCalledTimes int
+	MountCdromErr         error
+	MountCdromTypes       []string
+	MountCdromPaths       []string
 
 	AddFlagCalled            bool
 	AddFlagCalledTimes       int
@@ -70,6 +74,10 @@ type VirtualMachineMock struct {
 	CloneCalled bool
 	CloneConfig *CloneConfig
 	CloneError  error
+}
+
+type VirtualDeviceMock struct {
+	devName string
 }
 
 func (vm *VirtualMachineMock) Info(params ...string) (*mo.VirtualMachine, error) {
@@ -185,11 +193,27 @@ func (vm *VirtualMachineMock) GetDir() (string, error) {
 	return vm.GetDirResponse, vm.GetDirErr
 }
 
-func (vm *VirtualMachineMock) AddCdrom(cdromType string, isoPath string) error {
-	vm.AddCdromCalledTimes++
-	vm.AddCdromTypes = append(vm.AddCdromTypes, cdromType)
-	vm.AddCdromPaths = append(vm.AddCdromPaths, isoPath)
-	return vm.AddCdromErr
+func (_ *VirtualDeviceMock) GetVirtualDevice() *types.VirtualDevice {
+	return nil
+}
+
+func (vm *VirtualMachineMock) MakeCdroms(controllerType string, n_cdroms int, _ bool) (object.VirtualDeviceList, error) {
+	if vm.MakeCdromsCdromsPrexisted > 0 {
+		return nil, fmt.Errorf("Invalid configuration, new VM can't have more than zero CD-roms")
+	}
+	vm.MakeCdromsCdromsTotal = n_cdroms
+	var arr_cdroms object.VirtualDeviceList
+	for i := 0; i < n_cdroms; i++ {
+		arr_cdroms = append(arr_cdroms, &VirtualDeviceMock{controllerType})
+		vm.MountCdromTypes = append(vm.MountCdromTypes, controllerType)
+	}
+	return arr_cdroms, nil
+}
+
+func (vm *VirtualMachineMock) MountCdrom(cdromType string, isoPath string, _cdrom types.BaseVirtualDevice) error {
+	vm.MountCdromCalledTimes++
+	vm.MountCdromPaths = append(vm.MountCdromPaths, isoPath)
+	return vm.MountCdromErr
 }
 
 func (vm *VirtualMachineMock) AddFloppy(imgPath string) error {
@@ -259,7 +283,7 @@ func (vm *VirtualMachineMock) CreateCdrom(c *types.VirtualController) (*types.Vi
 	return nil, nil
 }
 
-func (vm *VirtualMachineMock) RemoveCdroms() error {
+func (vm *VirtualMachineMock) RemoveCdroms(n_cdroms int) error {
 	vm.RemoveCdromsCalled = true
 	return vm.RemoveCdromsErr
 }

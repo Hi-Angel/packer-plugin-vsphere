@@ -55,19 +55,24 @@ func (vm *VirtualMachineDriver) CreateCdrom(c *types.VirtualController) (*types.
 	return device, nil
 }
 
-func (vm *VirtualMachineDriver) RemoveCdroms() error {
+func (vm *VirtualMachineDriver) RemoveCdroms(n_cdroms int) error {
 	devices, err := vm.Devices()
 	if err != nil {
 		return err
 	}
 	cdroms := devices.SelectByType((*types.VirtualCdrom)(nil))
+	if n_cdroms != 0 {
+		cdroms =  cdroms[:n_cdroms]
+	}
 	if err = vm.RemoveDevice(true, cdroms...); err != nil {
 		return err
 	}
 
-	sata := devices.SelectByType((*types.VirtualAHCIController)(nil))
-	if err = vm.RemoveDevice(true, sata...); err != nil {
-		return err
+	if len(cdroms) > n_cdroms {
+		sata := devices.SelectByType((*types.VirtualAHCIController)(nil))
+		if err = vm.RemoveDevice(true, sata...); err != nil {
+			return err
+		}
 	}
 	return nil
 }

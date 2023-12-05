@@ -62,9 +62,11 @@ type VirtualMachine interface {
 	GetOvfExportOptions(m *ovf.Manager) ([]types.OvfOptionInfo, error)
 	Datacenter() *object.Datacenter
 
-	AddCdrom(controllerType string, datastoreIsoPath string) error
+	MakeCdroms(controllerType string, n_cdroms int, commitToESXI bool) (object.VirtualDeviceList, error)
+	MountCdrom(controllerType string, datastoreIsoPath string, cdrom types.BaseVirtualDevice) error
 	CreateCdrom(c *types.VirtualController) (*types.VirtualCdrom, error)
-	RemoveCdroms() error
+	// Removes specified number of CDroms. To remove all CDroms pass `0`.
+	RemoveCdroms(n_cdroms int) error
 	EjectCdroms() error
 	AddSATAController() error
 	FindSATAController() (*types.VirtualAHCIController, error)
@@ -1063,28 +1065,61 @@ func newVGPUProfile(vGPUProfile string) types.VirtualPCIPassthrough {
 	}
 }
 
-func (vm *VirtualMachineDriver) AddCdrom(controllerType string, datastoreIsoPath string) error {
+func (vm *VirtualMachineDriver) GetCdroms(n_cdroms int) (object.VirtualDeviceList, error) {
 	devices, err := vm.vm.Device(vm.driver.ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	cdroms := devices.SelectByType((*types.VirtualCdrom)(nil))
+	if len(cdroms) < n_cdroms {
+		return nil, fmt.Errorf("Not enough cdroms: VM has %d, expected %d", len(cdroms), n_cdroms)
+	} else {
+		return cdroms[:n_cdroms], nil
+	}
+}
+
+func (vm *VirtualMachineDriver) MakeCdroms(controllerType string, n_cdroms int, commitToESXI bool) (object.VirtualDeviceList, error) {
+	devices, err := vm.vm.Device(vm.driver.ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	var controller *types.VirtualController
 	if controllerType == "sata" {
 		c, err := vm.FindSATAController()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		controller = c.GetVirtualController()
 	} else {
 		c, err := devices.FindIDEController("")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		controller = c.GetVirtualController()
 	}
 
-	cdrom, err := vm.CreateCdrom(controller)
+	var arr_cdroms object.VirtualDeviceList
+	for i := 0; i < n_cdroms; i++ {
+		cdrom, err := vm.CreateCdrom(controller)
+		if err != nil {
+			return nil, err
+		}
+		arr_cdroms = append(arr_cdroms, cdrom)
+
+		log.Printf("Creating CD-ROM '%v' on controller '%v'", cdrom, controller)
+		if commitToESXI {
+			if err := vm.addDevice(cdrom); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return arr_cdroms, nil
+}
+
+func (vm *VirtualMachineDriver) MountCdrom(controllerType string, datastoreIsoPath string, _cdrom types.BaseVirtualDevice) error {
+	cdrom := _cdrom.(*types.VirtualCdrom)
+	devices, err := vm.vm.Device(vm.driver.ctx)
 	if err != nil {
 		return err
 	}
@@ -1101,9 +1136,14 @@ func (vm *VirtualMachineDriver) AddCdrom(controllerType string, datastoreIsoPath
 		}
 
 		devices.InsertIso(cdrom, datastoreIsoPath)
+
+		err = devices.Connect(cdrom)
+		if err != nil {
+			return err
+		}
 	}
 
-	log.Printf("Creating CD-ROM on controller '%v' with iso '%v'", controller, datastoreIsoPath)
+	log.Printf("Using CD-ROM with iso '%s'", datastoreIsoPath)
 	return vm.addDevice(cdrom)
 }
 

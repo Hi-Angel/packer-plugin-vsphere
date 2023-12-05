@@ -9,6 +9,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/hashicorp/packer-plugin-sdk/multistep"
 	packersdk "github.com/hashicorp/packer-plugin-sdk/packer"
@@ -46,43 +47,50 @@ func (s *StepReattachCDRom) Run(_ context.Context, state multistep.StateBag) mul
 		return multistep.ActionHalt
 	}
 
-	// Keep the CD-ROM devices on the image without any attached media.
 	ui.Say("Reattaching CD-ROM devices...")
-	// Remove all CD-ROM devices from the image.
-	err = vm.RemoveCdroms()
-	if err != nil {
-		state.Put("error", fmt.Errorf("error removing cdrom prior to reattaching: %v", err))
-		return multistep.ActionHalt
-	}
+	var n_actable_cdroms int = ReattachCDRom - len(s.CDRomConfig.ISOPaths)
+	if n_actable_cdroms < 0 {
+		err = vm.RemoveCdroms(int(math.Abs(float64(n_actable_cdroms))))
+		if err != nil {
+			state.Put("error", fmt.Errorf("error removing cdrom prior to reattaching: %v", err))
+			return multistep.ActionHalt
+		}
+		ui.Say("Ejecting CD-ROM media...")
+		// Eject media from CD-ROM devices.
+		err = vm.EjectCdroms()
+		if err != nil {
+			state.Put("error", fmt.Errorf("error ejecting cdrom media: %v", err))
+			return multistep.ActionHalt
+		}
+	} else {
+		// Eject media from pre-existing CD-ROM devices.
+		err = vm.EjectCdroms()
+		if err != nil {
+			state.Put("error", fmt.Errorf("error ejecting cdrom media: %v", err))
+			return multistep.ActionHalt
+		}
 
-	// If the CD-ROM device type is SATA, make sure SATA controller is present.
-	if s.CDRomConfig.CdromType == "sata" {
-		if _, err := vm.FindSATAController(); err == driver.ErrNoSataController {
-			ui.Say("Adding SATA controller...")
-			if err := vm.AddSATAController(); err != nil {
-				state.Put("error", fmt.Errorf("error adding sata controller: %v", err))
+		// create more CD-ROMs if required
+
+		// If the CD-ROM device type is SATA, make sure SATA controller is present.
+		if s.CDRomConfig.CdromType == "sata" {
+			if _, err := vm.FindSATAController(); err == driver.ErrNoSataController {
+				ui.Say("Adding SATA controller...")
+				if err := vm.AddSATAController(); err != nil {
+					state.Put("error", fmt.Errorf("error adding sata controller: %v", err))
+					return multistep.ActionHalt
+				}
+			}
+		}
+
+		if n_actable_cdroms > 0 {
+			ui.Say("Adding CD-ROM devices...")
+			_, err := vm.MakeCdroms(s.CDRomConfig.CdromType, n_actable_cdroms, true)
+			if err != nil {
+				state.Put("error", err)
 				return multistep.ActionHalt
 			}
 		}
-	}
-
-	ui.Say("Adding CD-ROM device...")
-	// Add the CD-ROM devices to the image based on the value of `reattach_cdroms`.
-	// A valid ISO path is required for this step. The media will subsequently be ejected.
-	for i := 0; i < ReattachCDRom; i++ {
-		err = vm.AddCdrom(s.CDRomConfig.CdromType, s.CDRomConfig.ISOPaths[0])
-		if err != nil {
-			state.Put("error", fmt.Errorf("error adding cdrom %d: %v", i, err))
-			return multistep.ActionHalt
-		}
-	}
-
-	ui.Say("Ejecting CD-ROM media...")
-	// Eject media from CD-ROM devices.
-	err = vm.EjectCdroms()
-	if err != nil {
-		state.Put("error", fmt.Errorf("error ejecting cdrom media: %v", err))
-		return multistep.ActionHalt
 	}
 	return multistep.ActionContinue
 }
