@@ -62,7 +62,7 @@ type VirtualMachine interface {
 	GetOvfExportOptions(m *ovf.Manager) ([]types.OvfOptionInfo, error)
 	Datacenter() *object.Datacenter
 
-	AddCdrom(controllerType string, datastoreIsoPath string) error
+	AddCdrom(controllerType string, datastoreIsoPath string, reuseVM bool) error
 	CreateCdrom(c *types.VirtualController) (*types.VirtualCdrom, error)
 	RemoveCdroms() error
 	EjectCdroms() error
@@ -1063,28 +1063,50 @@ func newVGPUProfile(vGPUProfile string) types.VirtualPCIPassthrough {
 	}
 }
 
-func (vm *VirtualMachineDriver) AddCdrom(controllerType string, datastoreIsoPath string) error {
+func (vm *VirtualMachineDriver) AddOrFindCdrom(reuseCDrom bool, controllerType string, devices object.VirtualDeviceList) (*types.VirtualCdrom, error) {
+	if reuseCDrom {
+		devices, err := vm.Devices()
+		if err != nil {
+			return nil, err
+		}
+		cdrom, err := devices.FindCdrom("")
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("Found CD-ROM '%v'", cdrom)
+		return cdrom, nil
+	} else {
+		var controller *types.VirtualController
+		if controllerType == "sata" {
+			c, err := vm.FindSATAController()
+			if err != nil {
+				return nil, err
+			}
+			controller = c.GetVirtualController()
+		} else {
+			c, err := devices.FindIDEController("")
+			if err != nil {
+				return nil, err
+			}
+			controller = c.GetVirtualController()
+		}
+
+		cdrom, err := vm.CreateCdrom(controller)
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("Creating CD-ROM '%v' on controller '%v'", cdrom, controller)
+		return cdrom, nil
+	}
+}
+
+func (vm *VirtualMachineDriver) AddCdrom(controllerType string, datastoreIsoPath string, reuseVM bool) error {
 	devices, err := vm.vm.Device(vm.driver.ctx)
 	if err != nil {
 		return err
 	}
 
-	var controller *types.VirtualController
-	if controllerType == "sata" {
-		c, err := vm.FindSATAController()
-		if err != nil {
-			return err
-		}
-		controller = c.GetVirtualController()
-	} else {
-		c, err := devices.FindIDEController("")
-		if err != nil {
-			return err
-		}
-		controller = c.GetVirtualController()
-	}
-
-	cdrom, err := vm.CreateCdrom(controller)
+	cdrom, err := vm.AddOrFindCdrom(reuseVM, controllerType, devices)
 	if err != nil {
 		return err
 	}
@@ -1101,10 +1123,19 @@ func (vm *VirtualMachineDriver) AddCdrom(controllerType string, datastoreIsoPath
 		}
 
 		devices.InsertIso(cdrom, datastoreIsoPath)
+
+		err = devices.Connect(cdrom)
+		if err != nil {
+			return err
+		}
 	}
 
-	log.Printf("Creating CD-ROM on controller '%v' with iso '%v'", controller, datastoreIsoPath)
-	return vm.addDevice(cdrom)
+	log.Printf("Using CD-ROM with iso '%s'", datastoreIsoPath)
+	if reuseVM {
+		return vm.editDevice(cdrom)
+	} else {
+		return vm.addDevice(cdrom)
+	}
 }
 
 func (vm *VirtualMachineDriver) AddFloppy(imgPath string) error {
@@ -1162,6 +1193,10 @@ func (vm *VirtualMachineDriver) commitDevToESXi(device types.BaseVirtualDevice, 
 
 func (vm *VirtualMachineDriver) addDevice(device types.BaseVirtualDevice) error {
 	return vm.commitDevToESXi(device, types.VirtualDeviceConfigSpecOperationAdd)
+}
+
+func (vm *VirtualMachineDriver) editDevice(device types.BaseVirtualDevice) error {
+	return vm.commitDevToESXi(device, types.VirtualDeviceConfigSpecOperationEdit)
 }
 
 func (vm *VirtualMachineDriver) AddConfigParams(params map[string]string, info *types.ToolsConfigInfo) error {

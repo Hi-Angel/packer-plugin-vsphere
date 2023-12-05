@@ -182,7 +182,7 @@ func (vm *VirtualMachineMock) GetDir() (string, error) {
 	return vm.GetDirResponse, vm.GetDirErr
 }
 
-func (vm *VirtualMachineMock) AddCdrom(cdromType string, isoPath string) error {
+func (vm *VirtualMachineMock) AddCdrom(cdromType string, isoPath string, _ bool) error {
 	vm.AddCdromCalledTimes++
 	vm.AddCdromCalled = true
 	vm.AddCdromTypes = append(vm.AddCdromTypes, cdromType)

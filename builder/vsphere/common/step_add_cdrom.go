@@ -40,6 +40,7 @@ type CDRomConfig struct {
 
 type StepAddCDRom struct {
 	Config *CDRomConfig
+	ReuseVM bool
 }
 
 func (c *CDRomConfig) Prepare() []error {
@@ -56,7 +57,8 @@ func (s *StepAddCDRom) Run(_ context.Context, state multistep.StateBag) multiste
 	ui := state.Get("ui").(packersdk.Ui)
 	vm := state.Get("vm").(driver.VirtualMachine)
 
-	if s.Config.CdromType == "sata" {
+	// when ReuseVM is set we are not supposed to add new hw
+	if !s.ReuseVM && s.Config.CdromType == "sata" {
 		if _, err := vm.FindSATAController(); err == driver.ErrNoSataController {
 			ui.Say("Adding SATA controller...")
 			if err := vm.AddSATAController(); err != nil {
@@ -77,7 +79,7 @@ func (s *StepAddCDRom) Run(_ context.Context, state multistep.StateBag) multiste
 	}
 
 	for _, path := range s.Config.ISOPaths {
-		if err := vm.AddCdrom(s.Config.CdromType, path); err != nil {
+		if err := vm.AddCdrom(s.Config.CdromType, path, s.ReuseVM); err != nil {
 			state.Put("error", fmt.Errorf("error mounting an image '%v': %v", path, err))
 			return multistep.ActionHalt
 		}
