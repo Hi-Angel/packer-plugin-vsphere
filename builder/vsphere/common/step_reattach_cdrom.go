@@ -70,6 +70,11 @@ func (s *StepReattachCDRom) Run(_ context.Context, state multistep.StateBag) mul
 			return multistep.ActionHalt
 		}
 
+		err = vm.RemoveCdroms(0)
+		if err != nil {
+			state.Put("error", fmt.Errorf("error removing cdrom prior to reattaching: %v", err))
+			return multistep.ActionHalt
+		}
 		// create more CD-ROMs if required
 
 		// If the CD-ROM device type is SATA, make sure SATA controller is present.

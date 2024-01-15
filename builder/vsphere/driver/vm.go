@@ -1078,6 +1078,10 @@ func (vm *VirtualMachineDriver) GetCdroms(n_cdroms int) (object.VirtualDeviceLis
 	}
 }
 
+// TBM:
+// * drop addDevice commit
+// * make everything snake notation
+
 func (vm *VirtualMachineDriver) MakeCdroms(controllerType string, n_cdroms int, commitToESXI bool) (object.VirtualDeviceList, error) {
 	devices, err := vm.vm.Device(vm.driver.ctx)
 	if err != nil {
@@ -1099,6 +1103,8 @@ func (vm *VirtualMachineDriver) MakeCdroms(controllerType string, n_cdroms int, 
 		controller = c.GetVirtualController()
 	}
 
+	// TBM: find highest unit number. Question: how it worked before without assigning explicitly? That shall simplify the code here, perhaps no search of devices is necessary.
+
 	var arr_cdroms object.VirtualDeviceList
 	for i := 0; i < n_cdroms; i++ {
 		cdrom, err := vm.CreateCdrom(controller)
@@ -1109,6 +1115,10 @@ func (vm *VirtualMachineDriver) MakeCdroms(controllerType string, n_cdroms int, 
 
 		log.Printf("Creating CD-ROM '%v' on controller '%v'", cdrom, controller)
 		if commitToESXI {
+			log.Printf("@@@ before insertiso")
+			devices.InsertIso(cdrom, "")
+			*cdrom.UnitNumber = int32(i)
+			log.Printf("@@@ before addDevice")
 			if err := vm.addDevice(cdrom); err != nil {
 				return nil, err
 			}
