@@ -90,7 +90,12 @@ func (s *StepAddCDRom) Run(_ context.Context, state multistep.StateBag) multiste
 			state.Put("error", fmt.Errorf("invalid path: empty string"))
 			return multistep.ActionHalt
 		}
-		if err := vm.AddCdrom(s.Config.CdromType, path); err != nil {
+		cdrom, err := vm.AddCdrom(s.Config.CdromType)
+		if err != nil {
+			state.Put("error", fmt.Errorf("errors creating a cdrom: %v", err))
+			return multistep.ActionHalt
+		}
+		if err := vm.MountCdrom(path, cdrom); err != nil {
 			state.Put("error", fmt.Errorf("error mounting an image '%v': %v", path, err))
 			return multistep.ActionHalt
 		}

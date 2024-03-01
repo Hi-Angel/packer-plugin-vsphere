@@ -62,7 +62,8 @@ type VirtualMachine interface {
 	GetOvfExportOptions(m *ovf.Manager) ([]types.OvfOptionInfo, error)
 	Datacenter() *object.Datacenter
 
-	AddCdrom(controllerType string, datastoreIsoPath string) error
+	MountCdrom(datastoreIsoPath string, cdrom *types.VirtualCdrom) error
+	AddCdrom(controllerType string) (*types.VirtualCdrom, error)
 	CreateCdrom(c *types.VirtualController) (*types.VirtualCdrom, error)
 	RemoveCdroms() error
 	RemoveNCdroms(n_cdroms int) error
@@ -1079,8 +1080,7 @@ func newVGPUProfile(vGPUProfile string) types.VirtualPCIPassthrough {
 	}
 }
 
-func (vm *VirtualMachineDriver) MountCdrom(controllerType string, datastoreIsoPath string, _cdrom types.BaseVirtualDevice) error {
-	cdrom := _cdrom.(*types.VirtualCdrom)
+func (vm *VirtualMachineDriver) MountCdrom(datastoreIsoPath string, cdrom *types.VirtualCdrom) error {
 	devices, err := vm.vm.Device(vm.driver.ctx)
 	if err != nil {
 		return err
@@ -1102,47 +1102,44 @@ func (vm *VirtualMachineDriver) MountCdrom(controllerType string, datastoreIsoPa
 	if err != nil {
 		return err
 	}
-	return nil
+	// TBM: add a print
+	return vm.editDevice(cdrom)
 }
 
-func (vm *VirtualMachineDriver) AddCdrom(controllerType string, datastoreIsoPath string) error {
+func (vm *VirtualMachineDriver) AddCdrom(controllerType string) (*types.VirtualCdrom, error) {
 	devices, err := vm.vm.Device(vm.driver.ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var controller *types.VirtualController
 	if controllerType == "sata" {
 		c, err := vm.FindSATAController()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		controller = c.GetVirtualController()
 	} else {
 		c, err := devices.FindIDEController("")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		controller = c.GetVirtualController()
 	}
 
 	cdrom, err := vm.CreateCdrom(controller)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	// TBM: is below really necessary for default creation?
+	// TBM 2: how about adding a test for below properties
+	cdrom.Backing = &types.VirtualCdromRemotePassthroughBackingInfo{}
+	cdrom.Connectable = &types.VirtualDeviceConnectInfo{}
 
-	if datastoreIsoPath == "" {
-		cdrom.Backing = &types.VirtualCdromRemotePassthroughBackingInfo{}
-		cdrom.Connectable = &types.VirtualDeviceConnectInfo{}
-	} else {
-		err := vm.MountCdrom(controllerType, datastoreIsoPath, cdrom)
-		if err != nil {
-			return err
-		}
+	if err := vm.addDevice(cdrom); err != nil {
+		return nil, err
 	}
-
-	log.Printf("Creating CD-ROM on controller '%v' with iso '%v'", controller, datastoreIsoPath)
-	return vm.addDevice(cdrom)
+	return cdrom, nil
 }
 
 func (vm *VirtualMachineDriver) AddFloppy(imgPath string) error {
@@ -1200,6 +1197,10 @@ func (vm *VirtualMachineDriver) commitDevToESXi(device types.BaseVirtualDevice, 
 
 func (vm *VirtualMachineDriver) addDevice(device types.BaseVirtualDevice) error {
 	return vm.commitDevToESXi(device, types.VirtualDeviceConfigSpecOperationAdd)
+}
+
+func (vm *VirtualMachineDriver) editDevice(device types.BaseVirtualDevice) error {
+	return vm.commitDevToESXi(device, types.VirtualDeviceConfigSpecOperationEdit)
 }
 
 func (vm *VirtualMachineDriver) AddConfigParams(params map[string]string, info *types.ToolsConfigInfo) error {

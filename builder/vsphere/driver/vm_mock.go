@@ -188,13 +188,18 @@ func (vm *VirtualMachineMock) GetDir() (string, error) {
 	return vm.GetDirResponse, vm.GetDirErr
 }
 
-func (vm *VirtualMachineMock) AddCdrom(controllerType string, isoPath string) error {
-	vm.AddCdromCalledTimes++
-	vm.AddCdromTypes = append(vm.AddCdromTypes, controllerType)
+func (vm *VirtualMachineMock) MountCdrom(isoPath string, cdrom *types.VirtualCdrom) error {
+	// TBM: content. Use nil as the cdrom arg
 	if isoPath != "" {
 		vm.AddCdromPaths = append(vm.AddCdromPaths, isoPath)
 	}
-	return vm.AddCdromErr
+	return nil
+}
+
+func (vm *VirtualMachineMock) AddCdrom(controllerType string) (*types.VirtualCdrom, error) {
+	vm.AddCdromCalledTimes++
+	vm.AddCdromTypes = append(vm.AddCdromTypes, controllerType)
+	return nil, vm.AddCdromErr
 }
 
 func (vm *VirtualMachineMock) AddFloppy(imgPath string) error {
